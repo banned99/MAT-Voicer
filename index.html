@@ -1,0 +1,88 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Socket.IO chat</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { font: 13px Helvetica, Arial; }
+      form { background: #000; padding: 3px; position: fixed; bottom: 0; width: 100%; }
+      form input { border: 0; padding: 10px; width: auto; margin-right: .5%; display: inline-flex;}
+      form button { width: 9%; background: rgb(130, 224, 255); border: none; padding: 10px; width: auto;}
+      #messages { list-style-type: none; margin: 0; padding: 0; height: 40%;}
+      #messages li { padding: 5px 10px; }
+      #messages li:nth-child(odd) { background: #eee; }
+      #voices { list-style-type: none; margin: 0; padding: 0; height: 40%;}
+      #voices li { padding: 5px 10px; }
+      #voices li:nth-child(odd) { background: #eee; }
+    </style>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://code.jquery.com/jquery-1.11.1.js"></script>
+    <script>
+        $(function () {
+          var constraint = { audio: true };
+          var mediaRecorder;
+          navigator.mediaDevices.getUserMedia(constraint).then((stream) => {
+              mediaRecorder = new MediaRecorder(stream);
+              
+              mediaRecorder.onstart = function (data) {
+                  this.chunks = [];
+              };
+
+              mediaRecorder.ondataavailable = function (data) {
+                  this.chunks.push(data);
+                  socket.emit('voice message', data.data);
+              };
+
+              mediaRecorder.onstop = function (data) {
+                  var blob = new Blob(this.chunks, { type: 'audio/ogg' });
+                  socket.emit('voice data', blob)
+              };
+          })
+
+          var socket = io();
+          socket.on('connected', function(presence) {
+            $('#messages').append($('<li>').text(presence));
+          })
+          $('form').submit(function(){
+            socket.emit('chat message', $('#m').val());
+            $('#m').val('');
+            return false;
+          });
+          socket.on('chat message', function(msg){
+            $('#messages').append($('<li>').text(msg));
+          });
+          socket.on('disconnected', function(presence) {
+            $('#messages').append($('<li>').text(presence));
+          })
+          socket.on('voice message', function (voice) {
+            var url = window.URL.createObjectURL(new Blob([voice], {type: 'audio/ogg'}))
+            var autoplayer = $('#autoplayer')
+            autoplayer.prop("src", url)
+          })
+          socket.on('voice data', function (voiceData) {
+            var src = window.URL.createObjectURL(new Blob([voiceData], {type: 'audio/ogg'}))
+            var audio = '<audio src="' + src + '"></audio>'
+            $('#voices').append(audio)
+          })
+          
+          var recording = false;
+          $('#voiceButton').on('mousedown', () => {
+              var recording = true;
+              mediaRecorder.start()
+          }).on('mouseup', () => {
+              var recording = false;
+              mediaRecorder.stop()
+          })
+        });
+      </script>
+  </head>
+  <body>
+    <audio id="autoplayer" autoplay="autoplay" style="display: none"></audio>
+    <ul id="messages"></ul>
+    <div id="voices"></div>
+    <form action="">
+      <input id="m" autocomplete="off" /><button>Send</button>
+      <button type="submit" id="voiceButton">Voice</button>
+    </form>
+  </body>
+</html>
